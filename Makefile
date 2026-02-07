@@ -46,4 +46,8 @@ $(A3_CLIENT): MT25061_Part_A3_Client.c
 
 # -------- Clean --------
 clean:
-	rm -f server_a1 client_a1 server_a2 client_a2 server_a3 client_a3
+	rm -f server_a1 client_a1 \
+	      server_a2 client_a2 \
+	      server_a3 client_a3 \
+	      *.o *.png *.txt 
+

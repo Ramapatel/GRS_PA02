@@ -1,2 +1,0 @@
-180983,,cpu_core/cache-misses/,8138784721,100.00,,
-<not counted>,,cpu_atom/cache-misses/,0,0.00,,

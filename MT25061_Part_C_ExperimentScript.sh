@@ -1,21 +1,23 @@
 #!/bin/bash
 # Roll No: MT25061
-# PA02 – Part C Automated Experiment Script (FINAL FIXED)
+# PA02 – Part C Automated Experiment Script (FINAL, STABLE)
 
 set -e
 
 OUTPUT="MT25061_Part_C_Results.csv"
 
-# Always start fresh CSV
+# Remove old output
 rm -f "$OUTPUT"
 
 MSG_SIZES=(64 256 1024 4096)
 THREADS=(1 2 4 8)
 IMPLS=("a1" "a2" "a3")
 
-echo "implementation,message_size,threads,total_time_sec,latency_us,throughput_mbps,cpu_cycles,context_switches,cache_misses" >> "$OUTPUT"
+# CSV header
+echo "implementation,message_size,threads,total_time_sec,latency_us,throughput_mbps,cpu_cycles,context_switches,cache_misses" \
+> "$OUTPUT"
 
-# Compile code
+# Compile everything cleanly
 make clean
 make
 
@@ -28,26 +30,25 @@ for impl in "${IMPLS[@]}"; do
 
       echo "Running $impl | msg=$msg | threads=$th"
 
-      # Start server
+      # Start server in server namespace
       sudo ip netns exec ns_server $SERVER $msg $th &
       SERVER_PID=$!
       sleep 1
 
-      # Run client with perf
+      # Run client with perf (CLIENT-SIDE PERF)
       sudo perf stat \
         -e cycles,context-switches,cache-misses \
         -x, \
         ip netns exec ns_client $CLIENT $msg $th \
         > client_tmp.txt 2> perf_tmp.txt
 
-      # Stop server
-      sudo kill $SERVER_PID || true
+      # Stop server (best-effort)
+      sudo kill $SERVER_PID 2>/dev/null || true
       wait $SERVER_PID 2>/dev/null || true
 
-      # =====================
-      # PARSE CLIENT OUTPUT
-      # =====================
-
+      # -----------------------------
+      # Parse client output
+      # -----------------------------
       TOTAL_TIME=$(grep -o 'total_time=[^ ]*' client_tmp.txt | cut -d= -f2)
       LATENCY=$(grep -o 'latency_us=[^ ]*' client_tmp.txt | cut -d= -f2)
       BYTES=$(grep -o 'bytes=[^ ]*' client_tmp.txt | cut -d= -f2)
@@ -56,20 +57,16 @@ for impl in "${IMPLS[@]}"; do
       [[ -z "$LATENCY" ]] && LATENCY="NA"
       [[ -z "$BYTES" ]] && BYTES="NA"
 
-      # =====================
-      # THROUGHPUT CALCULATION
-      # =====================
-
+      # Throughput (Mbps)
       if [[ "$BYTES" != "NA" && "$TOTAL_TIME" != "NA" ]]; then
         THROUGHPUT=$(awk "BEGIN {printf \"%.2f\", ($BYTES*8)/(1000000*$TOTAL_TIME)}")
       else
         THROUGHPUT="NA"
       fi
 
-      # =====================
-      # PARSE PERF OUTPUT
-      # =====================
-
+      # -----------------------------
+      # Parse perf output (CLIENT)
+      # -----------------------------
       CYCLES=$(awk -F, '/cycles/ {print ($1=="<not counted>"?"NA":$1); exit}' perf_tmp.txt)
       CTX=$(awk -F, '/context-switches/ {print ($1=="<not counted>"?"NA":$1); exit}' perf_tmp.txt)
       CACHE=$(awk -F, '/cache-misses/ {print ($1=="<not counted>"?"NA":$1); exit}' perf_tmp.txt)
@@ -78,12 +75,10 @@ for impl in "${IMPLS[@]}"; do
       [[ -z "$CTX" ]] && CTX="NA"
       [[ -z "$CACHE" ]] && CACHE="NA"
 
-      # =====================
-      # WRITE CLEAN CSV ROW
-      # =====================
-
+      # Write CSV row
       printf "%s,%s,%s,%s,%s,%s,%s,%s,%s\n" \
-      "$impl" "$msg" "$th" "$TOTAL_TIME" "$LATENCY" "$THROUGHPUT" "$CYCLES" "$CTX" "$CACHE" >> "$OUTPUT"
+        "$impl" "$msg" "$th" "$TOTAL_TIME" "$LATENCY" "$THROUGHPUT" \
+        "$CYCLES" "$CTX" "$CACHE" >> "$OUTPUT"
 
       sleep 1
     done
@@ -92,3 +87,4 @@ done
 
 rm -f client_tmp.txt perf_tmp.txt
 
+echo "Part C completed successfully."
